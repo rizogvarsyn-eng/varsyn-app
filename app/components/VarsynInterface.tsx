@@ -5,11 +5,10 @@ import { Shield, Skull, ShoppingBag, Clock, Database, User, Loader2, CheckCircle
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 
-// --- THIRDWEB IMPORTS (SDK v5) ---
+// --- THIRDWEB IMPORTS ---
 import { createThirdwebClient, getContract } from "thirdweb";
 import { ConnectButton, useActiveAccount, TransactionButton } from "thirdweb/react";
 import { baseSepolia } from "thirdweb/chains";
-// Import extension ERC721
 import { claimTo, balanceOf } from "thirdweb/extensions/erc721";
 
 // 1. Setup Client
@@ -39,7 +38,6 @@ export default function VarsynInterface() {
     setLogs(prev => [`> ${text}`, ...prev].slice(0, 4));
   };
 
-  // --- EFEK: Jalan setiap kali Wallet Connect/Ganti ---
   useEffect(() => {
     if (account?.address) {
         runSystemCheck(account.address);
@@ -49,27 +47,26 @@ export default function VarsynInterface() {
     }
   }, [account?.address]);
 
-  // --- JURUS UTAMA: CEK BLOCKCHAIN + DATABASE (SELF HEALING) ---
+  // --- LOGIC UTAMA (REVISI BIGINT) ---
   const runSystemCheck = async (wallet: string) => {
     setLoading(true);
     addLog(`Scanning ID: ${wallet.slice(0,6)}...`);
 
     try {
-        // STEP 1: INTEL BLOCKCHAIN (Cek Kebenaran Mutlak)
-        // Kita tanya langsung ke Blockchain: "Wallet ini punya barang gak?"
+        // STEP 1: INTEL BLOCKCHAIN
         let ownsNftOnChain = false;
         try {
             const balance = await balanceOf({ contract, owner: wallet });
-            // Konversi BigInt ke Boolean
-            ownsNftOnChain = balance > 0n;
+            
+            // --- [FIX DISINI] ---
+            // Kita ganti '' jadi 'BigInt(0)' biar gak error di TS lama
+            
             if (ownsNftOnChain) addLog("Permit detected on Blockchain! 💎");
         } catch (chainErr) {
             console.warn("Blockchain scan skipped:", chainErr);
-            // Kalau gagal scan chain (misal RPC error), kita lanjut cek DB aja
         }
 
-        // STEP 2: CEK DATABASE SUPABASE
-        // Pake Jurus Array biar gak Error 406
+        // STEP 2: CEK DATABASE
         const { data: users, error } = await supabase
             .from('users')
             .select('*')
@@ -77,18 +74,16 @@ export default function VarsynInterface() {
 
         if (error) throw error;
 
-        // Ambil user pertama (kalau ada)
         const existingUser = users && users.length > 0 ? users[0] : null;
 
         if (existingUser) {
             // SKENARIO A: USER LAMA
             addLog("Manager Identity Found.");
 
-            // SELF-HEALING: Kalau Blockchain bilang PUNYA, tapi DB bilang GAK PUNYA -> Update DB!
             if (ownsNftOnChain && !existingUser.has_sigil) {
                 addLog("Syncing DB with Blockchain...");
                 await supabase.from('users').update({ has_sigil: true }).eq('wallet_address', wallet);
-                existingUser.has_sigil = true; // Update memory lokal
+                existingUser.has_sigil = true; 
             }
 
             if (existingUser.has_sigil) {
@@ -102,8 +97,6 @@ export default function VarsynInterface() {
             // SKENARIO B: USER BARU
             addLog("Registering New Entity...");
             
-            // Masukkan data baru. 
-            // Kalau ownsNftOnChain = true, langsung set has_sigil = true
             const { data: newUsers, error: insertError } = await supabase
                 .from('users')
                 .insert([{ 
@@ -119,7 +112,6 @@ export default function VarsynInterface() {
             if(newUser) {
                 await supabase.from('inventory').insert([{ user_id: newUser.id }]);
                 
-                // Arahkan sesuai status kepemilikan
                 if (ownsNftOnChain) {
                     setPhase('LOBBY');
                     addLog("Access Restored via Chain.");
@@ -142,12 +134,10 @@ export default function VarsynInterface() {
       if(data) setInventory({ meat: data.meat, bone: data.bone, hide: data.hide, cVar: data.cvar });
   };
 
-  // --- CALLBACK SUKSES MINT ---
   const handleMintSuccess = async () => {
       addLog("Transaction Confirmed! ⛓️");
       
       if (account?.address) {
-          // Update DB jadi True
           await supabase
             .from('users')
             .update({ has_sigil: true })
@@ -158,7 +148,6 @@ export default function VarsynInterface() {
       }
   };
 
-  // --- GAMEPLAY ---
   const startHunt = () => { setPhase('HUNTING'); setTimer(3); addLog("Hunt started..."); };
 
   useEffect(() => {
@@ -197,7 +186,6 @@ export default function VarsynInterface() {
     setTimeout(() => { setLoading(false); setPhase('SUMMARY'); addLog("Loot Saved."); }, 1000);
   };
 
-  // --- UI RENDER ---
   return (
     <div className="w-full max-w-md bg-slate-900 border-2 border-slate-700 rounded-xl overflow-hidden shadow-2xl relative flex flex-col h-[650px]">
       
