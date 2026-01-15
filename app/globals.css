@@ -2,27 +2,30 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 1. IMPORT FONT PIXEL (VT323) */
+/* --- 1. IMPORT FONT PIXEL (VT323) --- */
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
 :root {
-  /* Warna Background Gelap (Biar nyatu sama wrapper desktop) */
-  --background-rgb: 15, 17, 21; 
+  /* Warna Background Gelap (Sesuai Wrapper Desktop) */
+  --background-rgb: 15, 17, 21; /* #0f1115 */
   --foreground-rgb: 255, 255, 255;
 }
 
 body {
   color: rgb(var(--foreground-rgb));
   background-color: rgb(var(--background-rgb));
-  /* Set font default jadi Pixel */
-  font-family: 'VT323', monospace; 
-  /* Reset margin biar full screen di mobile */
+  /* Set Font Utama jadi Pixel */
+  font-family: 'VT323', monospace;
+  /* Reset Margin biar Fullscreen di Mobile */
   margin: 0;
   padding: 0;
-  overflow: hidden; /* Mencegah scroll bar ganda di desktop */
+  /* Mencegah scrollbar ganda di desktop */
+  overflow-x: hidden; 
 }
 
-/* UTILITY: Animasi Melayang (Buat Creator / Hantu) */
+/* --- 2. UTILITY CLASSES --- */
+
+/* Animasi Melayang (Buat Logo/Karakter) */
 @keyframes float {
   0% { transform: translateY(0px); }
   50% { transform: translateY(-10px); }
@@ -33,17 +36,39 @@ body {
   animation: float 3s ease-in-out infinite;
 }
 
-/* UTILITY: Scrollbar Keren (Optional, buat log) */
+/* Sudut Pixel (Opsional, kalau mau dipake di custom CSS) */
+.pixel-corners {
+  clip-path: polygon(
+    0px 4px,
+    4px 4px,
+    4px 0px,
+    calc(100% - 4px) 0px,
+    calc(100% - 4px) 4px,
+    100% 4px,
+    100% calc(100% - 4px),
+    calc(100% - 4px) calc(100% - 4px),
+    calc(100% - 4px) 100%,
+    4px 100%,
+    4px calc(100% - 4px),
+    0px calc(100% - 4px)
+  );
+}
+
+/* --- 3. CUSTOM SCROLLBAR (Biar Rapi) --- */
 ::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: #1a1a1a; 
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #4ade80; /* Warna Hijau Terminal */
+  background: #4a5568; /* Warna Abu-abu Slate */
   border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #22c55e; 
+  background: #4ade80; /* Hijau saat di-hover */
 }
