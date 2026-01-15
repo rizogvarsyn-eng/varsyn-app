@@ -2,28 +2,33 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --- 1. IMPORT FONT PIXEL (VT323) --- */
+/* --- IMPORT FONT PIXEL (VT323) --- */
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
 :root {
-  /* Warna Background Gelap (Sesuai Wrapper Desktop) */
+  /* Warna Background Desktop (Dark Grey) */
   --background-rgb: 15, 17, 21; /* #0f1115 */
   --foreground-rgb: 255, 255, 255;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
 }
 
 body {
   color: rgb(var(--foreground-rgb));
   background-color: rgb(var(--background-rgb));
-  /* Set Font Utama jadi Pixel */
+  /* Kunci Font Utama jadi Pixel */
   font-family: 'VT323', monospace;
-  /* Reset Margin biar Fullscreen di Mobile */
+  /* Reset Margin biar Fullscreen aman */
   margin: 0;
   padding: 0;
   /* Mencegah scrollbar ganda di desktop */
-  overflow-x: hidden; 
+  overflow: hidden; 
 }
 
-/* --- 2. UTILITY CLASSES --- */
+/* --- ANIMASI & UTILITY --- */
 
 /* Animasi Melayang (Buat Logo/Karakter) */
 @keyframes float {
@@ -36,39 +41,18 @@ body {
   animation: float 3s ease-in-out infinite;
 }
 
-/* Sudut Pixel (Opsional, kalau mau dipake di custom CSS) */
-.pixel-corners {
-  clip-path: polygon(
-    0px 4px,
-    4px 4px,
-    4px 0px,
-    calc(100% - 4px) 0px,
-    calc(100% - 4px) 4px,
-    100% 4px,
-    100% calc(100% - 4px),
-    calc(100% - 4px) calc(100% - 4px),
-    calc(100% - 4px) 100%,
-    4px 100%,
-    4px calc(100% - 4px),
-    0px calc(100% - 4px)
-  );
-}
-
-/* --- 3. CUSTOM SCROLLBAR (Biar Rapi) --- */
+/* Custom Scrollbar (Tipis & Gelap) */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
   background: #1a1a1a; 
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #4a5568; /* Warna Abu-abu Slate */
+  background: #4a5568; 
   border-radius: 3px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #4ade80; /* Hijau saat di-hover */
+  background: #4ade80; 
 }
