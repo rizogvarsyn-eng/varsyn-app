@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Shield, Skull, ShoppingBag, Clock, Database, User, Loader2, CheckCircle } from 'lucide-react';
+import { Skull, ShoppingBag, Clock, Database, ChevronRight, CheckCircle, ImageOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 
@@ -23,106 +23,131 @@ const contract = getContract({
   address: process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "", 
 });
 
-type Phase = 'GATEWAY' | 'MINTING' | 'LOBBY' | 'HUNTING' | 'SUMMARY';
+type Phase = 'GATEWAY' | 'INTRO_DIALOGUE' | 'MINTING' | 'LOBBY' | 'HUNTING' | 'SUMMARY';
+
+// --- KOMPONEN GAMBAR AMAN (SAFE IMAGE) ---
+// Ini jurus biar aplikasi gak rusak kalau gambar ilang
+const SafeImage = ({ src, alt, className, fallbackText }: { src: string, alt: string, className?: string, fallbackText?: string }) => {
+    const [error, setError] = useState(false);
+    // Kalau gambar lokal gak ada, pake gambar placeholder online
+    const fallbackSrc = `https://placehold.co/400x600/1a1a1a/4ade80/png?text=${fallbackText || 'NO+ASSET'}&font=roboto`;
+
+    return (
+        <img 
+            src={error ? fallbackSrc : src} 
+            alt={alt} 
+            className={className} 
+            onError={() => setError(true)}
+        />
+    );
+};
 
 export default function VarsynInterface() {
   const account = useActiveAccount();
-  
   const [phase, setPhase] = useState<Phase>('GATEWAY');
+  
+  // Game State
   const [loading, setLoading] = useState(false);
   const [timer, setTimer] = useState(0);
   const [inventory, setInventory] = useState({ meat: 0, bone: 0, hide: 0, cVar: 0 });
   const [logs, setLogs] = useState<string[]>([]);
 
+  // Dialogue State
+  const [dialogueText, setDialogueText] = useState("");
+  const [dialogueIndex, setDialogueIndex] = useState(0);
+  const [isTyping, setIsTyping] = useState(false);
+
+  const introDialogues = [
+    "System Initializing...",
+    "Connection established.",
+    "Greetings, Manager. I am The Creator.",
+    "Varsyn's ecosystem is collapsing.",
+    "We need an external entity to restore order.",
+    "Access is restricted to authorized personnel.",
+    "Show me your SigilVar, or forge a new identity."
+  ];
+
   const addLog = (text: string) => {
-    setLogs(prev => [`> ${text}`, ...prev].slice(0, 4));
+    setLogs(prev => [`> ${text}`, ...prev].slice(0, 3));
   };
 
+  // --- TYPEWRITER ---
+  useEffect(() => {
+    if (phase === 'INTRO_DIALOGUE' && dialogueIndex < introDialogues.length) {
+      setIsTyping(true);
+      setDialogueText("");
+      let currentText = introDialogues[dialogueIndex];
+      let charIndex = 0;
+      const typingInterval = setInterval(() => {
+        if (charIndex <= currentText.length) {
+          setDialogueText(currentText.slice(0, charIndex));
+          charIndex++;
+        } else {
+          clearInterval(typingInterval);
+          setIsTyping(false);
+        }
+      }, 40); 
+      return () => clearInterval(typingInterval);
+    }
+  }, [phase, dialogueIndex]);
+
+  const nextDialogue = () => {
+    if (dialogueIndex < introDialogues.length - 1) {
+      setDialogueIndex(prev => prev + 1);
+    } else {
+      setPhase('MINTING');
+    }
+  };
+
+  // --- SYSTEM CHECK ---
   useEffect(() => {
     if (account?.address) {
-        runSystemCheck(account.address);
+        checkUserStatus(account.address);
     } else {
         setPhase('GATEWAY');
-        addLog("Wallet disconnected.");
+        setDialogueIndex(0);
     }
   }, [account?.address]);
 
-  // --- LOGIC UTAMA (REVISI BIGINT) ---
-  const runSystemCheck = async (wallet: string) => {
+  const checkUserStatus = async (wallet: string) => {
     setLoading(true);
-    addLog(`Scanning ID: ${wallet.slice(0,6)}...`);
+    addLog(`Scanning...`);
 
     try {
-        // STEP 1: INTEL BLOCKCHAIN
         let ownsNftOnChain = false;
         try {
             const balance = await balanceOf({ contract, owner: wallet });
-            
-            // --- [FIX DISINI] ---
-            // Kita ganti '' jadi 'BigInt(0)' biar gak error di TS lama
-            
-            if (ownsNftOnChain) addLog("Permit detected on Blockchain! 💎");
-        } catch (chainErr) {
-            console.warn("Blockchain scan skipped:", chainErr);
-        }
+            ownsNftOnChain = balance > BigInt(0);
+        } catch (e) { console.warn(e); }
 
-        // STEP 2: CEK DATABASE
-        const { data: users, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('wallet_address', wallet);
-
+        const { data: users, error } = await supabase.from('users').select('*').eq('wallet_address', wallet);
         if (error) throw error;
-
         const existingUser = users && users.length > 0 ? users[0] : null;
 
         if (existingUser) {
-            // SKENARIO A: USER LAMA
-            addLog("Manager Identity Found.");
-
             if (ownsNftOnChain && !existingUser.has_sigil) {
-                addLog("Syncing DB with Blockchain...");
                 await supabase.from('users').update({ has_sigil: true }).eq('wallet_address', wallet);
-                existingUser.has_sigil = true; 
+                existingUser.has_sigil = true;
             }
-
             if (existingUser.has_sigil) {
                 setPhase('LOBBY');
                 loadInventory(existingUser.id);
             } else {
-                setPhase('MINTING');
+                setPhase('INTRO_DIALOGUE');
             }
-
         } else {
-            // SKENARIO B: USER BARU
-            addLog("Registering New Entity...");
-            
-            const { data: newUsers, error: insertError } = await supabase
-                .from('users')
-                .insert([{ 
-                    wallet_address: wallet, 
-                    has_sigil: ownsNftOnChain 
-                }])
-                .select();
-            
-            if (insertError) throw insertError;
+            const { data: newUsers } = await supabase.from('users').insert([{ wallet_address: wallet, has_sigil: ownsNftOnChain }]).select();
+            const newUser = newUsers?.[0];
+            if(newUser) await supabase.from('inventory').insert([{ user_id: newUser.id }]);
 
-            const newUser = newUsers && newUsers.length > 0 ? newUsers[0] : null;
-
-            if(newUser) {
-                await supabase.from('inventory').insert([{ user_id: newUser.id }]);
-                
-                if (ownsNftOnChain) {
-                    setPhase('LOBBY');
-                    addLog("Access Restored via Chain.");
-                } else {
-                    setPhase('MINTING');
-                }
+            if (ownsNftOnChain) {
+                setPhase('LOBBY');
+            } else {
+                setPhase('INTRO_DIALOGUE');
             }
         }
     } catch (err) {
-        console.error("System Check Error:", err);
-        addLog("Connection Failed.");
+        console.error(err);
     } finally {
         setLoading(false);
     }
@@ -130,26 +155,20 @@ export default function VarsynInterface() {
 
   const loadInventory = async (userId: string) => {
       const { data: invs } = await supabase.from('inventory').select('*').eq('user_id', userId);
-      const data = invs && invs.length > 0 ? invs[0] : null;
+      const data = invs?.[0];
       if(data) setInventory({ meat: data.meat, bone: data.bone, hide: data.hide, cVar: data.cvar });
   };
 
   const handleMintSuccess = async () => {
-      addLog("Transaction Confirmed! ⛓️");
-      
       if (account?.address) {
-          await supabase
-            .from('users')
-            .update({ has_sigil: true })
-            .eq('wallet_address', account.address);
-          
+          await supabase.from('users').update({ has_sigil: true }).eq('wallet_address', account.address);
           setPhase('LOBBY');
-          addLog("Access Granted.");
       }
   };
 
-  const startHunt = () => { setPhase('HUNTING'); setTimer(3); addLog("Hunt started..."); };
-
+  // --- GAMEPLAY ---
+  const startHunt = () => { setPhase('HUNTING'); setTimer(3); };
+  
   useEffect(() => {
     if (phase === 'HUNTING' && timer > 0) {
       const tick = setInterval(() => setTimer(t => t - 1), 1000);
@@ -174,141 +193,182 @@ export default function VarsynInterface() {
              const oldInv = invs?.[0];
              if (oldInv) {
                  await supabase.from('inventory').update({
-                     meat: oldInv.meat + loot.meat,
-                     bone: oldInv.bone + loot.bone,
-                     hide: oldInv.hide + loot.hide,
-                     cvar: oldInv.cvar + loot.cVar
+                     meat: oldInv.meat + loot.meat, bone: oldInv.bone + loot.bone, hide: oldInv.hide + loot.hide, cvar: oldInv.cvar + loot.cVar
                  }).eq('user_id', user.id);
              }
         }
     }
     setInventory(prev => ({ meat: prev.meat + loot.meat, bone: prev.bone + loot.bone, hide: prev.hide + loot.hide, cVar: prev.cVar + loot.cVar }));
-    setTimeout(() => { setLoading(false); setPhase('SUMMARY'); addLog("Loot Saved."); }, 1000);
+    setTimeout(() => { setLoading(false); setPhase('SUMMARY'); }, 1000);
   };
 
+  // --- RENDER VISUAL (MOBILE PORTRAIT + SAFE IMAGES) ---
   return (
-    <div className="w-full max-w-md bg-slate-900 border-2 border-slate-700 rounded-xl overflow-hidden shadow-2xl relative flex flex-col h-[650px]">
+    <div className="w-full max-w-sm aspect-[9/16] bg-black relative overflow-hidden shadow-2xl border-4 border-[#2d3748] rounded-xl font-mono text-white mx-auto my-4">
       
-      {/* HEADER */}
-      <div className="bg-slate-950 p-4 border-b border-slate-800 flex justify-between items-center z-20 shadow-lg">
-        <div className="flex items-center gap-2">
-            <div className={`w-3 h-3 rounded-full ${phase === 'LOBBY' ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
-            <span className="font-bold tracking-widest text-green-500 text-sm">VARSYN<span className="text-slate-600 text-xs">.OS</span></span>
-        </div>
-        <div className="scale-90 origin-right">
-            <ConnectButton client={client} chain={baseSepolia} theme="dark" connectModal={{ size: "compact" }} />
-        </div>
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+        .pixel-font { font-family: 'VT323', monospace; }
+        .pixel-corners { clip-path: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px)); }
+        .bg-portrait { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+      `}</style>
+
+      {/* LAYER 1: BACKGROUND (Pake SafeImage) */}
+      <div className="absolute inset-0 z-0">
+        {phase === 'GATEWAY' && <SafeImage src="/assets/bg_intro.png" fallbackText="VOID+BG" alt="bg" className="bg-portrait opacity-60" />}
+        {phase === 'INTRO_DIALOGUE' && <SafeImage src="/assets/bg_intro.png" fallbackText="VOID+BG" alt="bg" className="bg-portrait opacity-40" />}
+        {phase === 'MINTING' && <SafeImage src="/assets/bg_intro.png" fallbackText="VOID+BG" alt="bg" className="bg-portrait opacity-30" />}
+        {phase === 'LOBBY' && <SafeImage src="/assets/bg_lobby.png" fallbackText="VILLAGE+BG" alt="bg" className="bg-portrait" />}
+        {phase === 'HUNTING' && <SafeImage src="/assets/bg_hunt.png" fallbackText="FOREST+BG" alt="bg" className="bg-portrait" />}
+        {phase === 'SUMMARY' && <SafeImage src="/assets/bg_lobby.png" fallbackText="VILLAGE+BG" alt="bg" className="bg-portrait blur-sm" />}
       </div>
 
-      {/* MAIN SCREEN */}
-      <main className="flex-1 relative p-6 flex flex-col items-center justify-center overflow-hidden">
-        <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(#4ade80 1px, transparent 1px)', backgroundSize: '20px 20px' }}></div>
+      {/* LAYER 2: UI CONTENT */}
+      <div className="absolute inset-0 z-10 flex flex-col pointer-events-none">
+        
+        {/* TOP BAR */}
+        <div className="bg-black/70 p-3 border-b-2 border-white/10 flex justify-between items-center pointer-events-auto backdrop-blur-sm">
+            <span className="pixel-font text-2xl text-green-400 tracking-widest drop-shadow-md">VARSYN</span>
+            <div className="scale-75 origin-right">
+                <ConnectButton client={client} chain={baseSepolia} theme="dark" connectModal={{ size: "compact" }} />
+            </div>
+        </div>
 
-        <AnimatePresence mode='wait'>
-            
-            {phase === 'GATEWAY' && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center space-y-6 z-10">
-                    <div className="w-24 h-24 bg-slate-800 rounded-full mx-auto flex items-center justify-center border-4 border-slate-700">
-                        <User size={40} className="text-slate-500" />
-                    </div>
-                    <div>
-                        <h1 className="text-2xl font-bold text-white mb-2">IDENTIFICATION</h1>
-                        <p className="text-xs text-slate-400">Please connect Neural Link (Wallet) ↗</p>
-                    </div>
-                </motion.div>
-            )}
+        {/* MAIN GAME AREA */}
+        <div className="flex-1 relative flex flex-col items-center justify-center p-4 pointer-events-auto">
+            <AnimatePresence mode='wait'>
 
-            {phase === 'MINTING' && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full space-y-4 z-10 text-center">
-                    <div className="border border-red-500/30 bg-red-900/10 p-4 rounded">
-                        <h2 className="text-red-400 font-bold text-sm mb-1">ACCESS DENIED</h2>
-                        <p className="text-[10px] text-red-300">No SigilVar detected on Blockchain.</p>
-                    </div>
-                    <div className="bg-slate-800 p-3 rounded border border-slate-700 text-left">
-                        <div className="flex justify-between text-xs text-slate-400 mb-1"><span>ITEM</span><span>COST</span></div>
-                        <div className="flex justify-between font-bold text-white"><span>SigilVar [SBT]</span><span>0.5 USDC</span></div>
-                    </div>
-                    <div className="w-full">
-                        <TransactionButton
-                            transaction={() => {
-                                if(!account?.address) throw new Error("No wallet");
-                                return claimTo({ contract, to: account.address, quantity: BigInt(1) });
-                            }}
-                            onTransactionConfirmed={handleMintSuccess}
-                            onError={(err) => { console.error(err); addLog("Mint Failed. Check Console."); }}
-                            unstyled
-                            className="w-full py-4 bg-green-600 hover:bg-green-500 text-black font-bold pixel-corners transition-transform active:scale-95 flex items-center justify-center"
-                        >
-                            MINT PERMIT
-                        </TransactionButton>
-                        <p className="text-[10px] text-slate-500 mt-2">Check Base Sepolia ETH Balance</p>
-                    </div>
-                </motion.div>
-            )}
-
-            {phase === 'LOBBY' && (
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full h-full flex flex-col z-10">
-                    <div className="flex-1 bg-slate-800/50 rounded-lg mb-4 border border-slate-700 flex flex-col items-center justify-center relative overflow-hidden group">
-                         <div className="absolute inset-0 bg-green-500/5 group-hover:bg-green-500/10 transition-colors"></div>
-                         <div className="text-6xl mb-2 animate-bounce">🥷</div>
-                         <div className="text-[10px] text-green-500 font-mono bg-black/50 px-2 py-1 rounded border border-green-900 flex items-center gap-1">
-                            <CheckCircle size={10} /> {account?.address?.slice(0,6)}...
-                         </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                        <button onClick={startHunt} className="h-24 bg-red-900/20 border border-red-500/50 hover:bg-red-900/40 rounded flex flex-col items-center justify-center gap-2 group transition-all">
-                            <Skull className="text-red-400 group-hover:scale-110 transition-transform" />
-                            <span className="text-xs font-bold text-red-200">START HUNT</span>
-                        </button>
-                        <button className="h-24 bg-slate-800 border border-slate-700 rounded flex flex-col items-center justify-center gap-2 opacity-50 cursor-not-allowed">
-                            <ShoppingBag className="text-slate-500" />
-                            <span className="text-xs font-bold text-slate-500">STORE</span>
-                        </button>
-                    </div>
-                    <div className="mt-4 flex justify-between px-2 text-xs text-slate-400 font-mono">
-                        <span>MEAT: <b className="text-white">{inventory.meat}</b></span>
-                        <span>BONE: <b className="text-white">{inventory.bone}</b></span>
-                        <span>HIDE: <b className="text-white">{inventory.hide}</b></span>
-                    </div>
-                </motion.div>
-            )}
-
-            {phase === 'HUNTING' && (
-                <motion.div className="text-center z-10 space-y-6">
-                    <div className="relative w-32 h-32 mx-auto flex items-center justify-center">
-                         <div className="absolute inset-0 bg-green-500/20 rounded-full animate-ping"></div>
-                         <div className="w-24 h-24 bg-slate-800 rounded-full border-2 border-green-500 flex items-center justify-center z-10">
-                            <span className="text-4xl animate-pulse">⚔️</span>
-                         </div>
-                    </div>
-                    <div className="bg-black/40 inline-flex items-center gap-2 px-4 py-2 rounded text-green-400 font-mono text-xl border border-green-900/50">
-                        <Clock size={18} /> 00:0{timer}
-                    </div>
-                    {timer === 0 && <button onClick={claimLoot} disabled={loading} className="w-full py-3 bg-yellow-600 text-white font-bold pixel-corners animate-bounce">{loading ? 'SAVING...' : 'CLAIM REWARDS'}</button>}
-                </motion.div>
-            )}
-
-            {phase === 'SUMMARY' && (
-                <motion.div className="text-center z-10 w-full">
-                    <h2 className="text-2xl font-bold text-white mb-6">HUNT COMPLETE</h2>
-                    <div className="bg-slate-800 p-4 rounded mb-6 border border-slate-700">
-                        <p className="text-xs text-green-500 mb-2 font-mono flex items-center justify-center gap-1">
-                            <Database size={10}/> SYNCED TO SUPABASE
-                        </p>
-                        <div className="space-y-2">
-                             {Object.entries(inventory).map(([key, val]) => (val > 0 && <div key={key} className="flex justify-between text-sm px-2 border-b border-slate-700 pb-1"><span className="uppercase text-slate-400">{key}</span><span className="text-white font-bold">{val}</span></div>))}
+                {phase === 'GATEWAY' && (
+                    <motion.div initial={{opacity:0, y:20}} animate={{opacity:1, y:0}} className="text-center space-y-6 mt-20">
+                        <SafeImage src="/assets/sigil_seal.png" fallbackText="SEAL" alt="seal" className="w-32 h-32 mx-auto animate-pulse drop-shadow-[0_0_15px_rgba(74,222,128,0.5)]" />
+                        <div>
+                            <h1 className="pixel-font text-5xl text-white drop-shadow-lg mb-2">VARSYN</h1>
+                            <p className="pixel-font text-xl text-green-400 bg-black/50 px-2 rounded">SYSTEM OF RESTORATION</p>
                         </div>
-                    </div>
-                    <button onClick={() => setPhase('LOBBY')} className="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold pixel-corners">RETURN TO BASE</button>
-                </motion.div>
-            )}
+                    </motion.div>
+                )}
 
-        </AnimatePresence>
-      </main>
-      
-      {/* LOGS */}
-      <div className="h-24 bg-black p-3 font-mono text-[10px] border-t border-slate-800 overflow-hidden flex flex-col justify-end">
-         {logs.map((log, i) => <div key={i} className="text-green-500/70 truncate">{log}</div>)}
+                {phase === 'INTRO_DIALOGUE' && (
+                    <motion.div initial={{opacity:0}} animate={{opacity:1}} className="w-full h-full flex flex-col justify-end pb-8">
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <SafeImage src="/assets/creator_silhouette.png" fallbackText="THE+CREATOR" alt="creator" className="w-64 opacity-90 animate-float" />
+                        </div>
+                        <div 
+                            className="bg-[#1a1a1a]/95 border-2 border-white p-4 min-h-[140px] relative cursor-pointer pixel-corners shadow-lg"
+                            onClick={nextDialogue}
+                        >
+                            <h3 className="pixel-font text-xl text-green-400 mb-1 tracking-wider">THE CREATOR</h3>
+                            <p className="pixel-font text-2xl leading-tight text-slate-200">{dialogueText}</p>
+                            {!isTyping && <div className="absolute bottom-3 right-3 animate-bounce"><ChevronRight size={24} className="text-green-400" /></div>}
+                        </div>
+                    </motion.div>
+                )}
+
+                {phase === 'MINTING' && (
+                    <motion.div initial={{opacity:0}} animate={{opacity:1}} className="w-full h-full flex flex-col justify-center items-center space-y-8">
+                        <div className="bg-black/80 p-6 rounded-xl border border-slate-700 text-center w-full max-w-xs backdrop-blur-md">
+                            <SafeImage src="/assets/sigil_seal.png" fallbackText="SEAL" alt="seal" className="w-24 h-24 mx-auto mb-4" />
+                            <h2 className="pixel-font text-3xl text-red-400 mb-2">ACCESS REQUIRED</h2>
+                            <p className="pixel-font text-lg text-slate-300">Mint SigilVar to Enter</p>
+                        </div>
+                        <div className="w-full max-w-xs">
+                            <TransactionButton
+                                transaction={() => {
+                                    if(!account?.address) throw new Error("No wallet");
+                                    return claimTo({ contract, to: account.address, quantity: BigInt(1) });
+                                }}
+                                onTransactionConfirmed={handleMintSuccess}
+                                unstyled
+                                className="w-full py-4 bg-green-600 hover:bg-green-500 text-white pixel-font text-2xl border-b-4 border-green-800 active:border-b-0 active:translate-y-1 transition-all pixel-corners shadow-xl"
+                            >
+                                MINT (0.5 USDC)
+                            </TransactionButton>
+                        </div>
+                    </motion.div>
+                )}
+
+                {phase === 'LOBBY' && (
+                    <motion.div initial={{opacity:0}} animate={{opacity:1}} className="w-full h-full flex flex-col justify-between pt-10 pb-4">
+                        <div className="absolute top-2 right-2 bg-black/60 px-3 py-1 rounded pixel-corners border border-slate-600">
+                            <span className="pixel-font text-yellow-400 text-lg flex items-center gap-1"><span className="text-xs">LVL</span> 1</span>
+                        </div>
+                        <div className="flex-1 relative flex items-end justify-center pb-24">
+                            <SafeImage src="/assets/char_idle.gif" fallbackText="HERO" alt="char" className="w-32 pixelated drop-shadow-2xl" />
+                        </div>
+                        <div className="space-y-3 w-full bg-black/40 p-2 rounded-xl backdrop-blur-sm">
+                            <div className="flex gap-2">
+                                <button onClick={startHunt} className="flex-1 bg-red-700 border-b-4 border-red-900 p-3 pixel-corners active:border-b-0 active:translate-y-1">
+                                    <span className="pixel-font text-2xl text-white block">HUNT</span>
+                                </button>
+                                <button className="flex-1 bg-slate-700 border-b-4 border-slate-900 p-3 pixel-corners opacity-70">
+                                    <span className="pixel-font text-2xl text-white block">STORE</span>
+                                </button>
+                            </div>
+                            <div className="bg-[#2d2d2d] border-2 border-gray-600 p-2 flex justify-between pixel-corners">
+                                <div className="flex items-center gap-2">
+                                    <SafeImage src="/assets/icon_meat.png" fallbackText="M" alt="meat" className="w-6 h-6" />
+                                    <span className="pixel-font text-xl">{inventory.meat}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <SafeImage src="/assets/icon_bone.png" fallbackText="B" alt="bone" className="w-6 h-6" />
+                                    <span className="pixel-font text-xl">{inventory.bone}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <SafeImage src="/assets/icon_hide.png" fallbackText="H" alt="hide" className="w-6 h-6" />
+                                    <span className="pixel-font text-xl">{inventory.hide}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </motion.div>
+                )}
+
+                {phase === 'HUNTING' && (
+                    <motion.div className="w-full h-full flex flex-col items-center justify-center space-y-12">
+                        <div className="relative w-full flex justify-center">
+                            <SafeImage src="/assets/char_run.gif" fallbackText="RUNNING..." alt="run" className="w-40 pixelated" />
+                        </div>
+                        <div className="bg-black/80 px-8 py-3 rounded pixel-corners border-2 border-green-500 shadow-[0_0_20px_rgba(74,222,128,0.3)]">
+                            <span className="pixel-font text-5xl text-green-400 tracking-widest">00:0{timer}</span>
+                        </div>
+                        {timer === 0 && (
+                            <button onClick={claimLoot} disabled={loading} className="w-full max-w-xs py-4 bg-yellow-600 hover:bg-yellow-500 text-white pixel-font text-3xl border-b-4 border-yellow-800 pixel-corners animate-bounce shadow-xl">
+                                CLAIM LOOT!
+                            </button>
+                        )}
+                    </motion.div>
+                )}
+
+                {phase === 'SUMMARY' && (
+                    <motion.div className="w-full h-full flex flex-col justify-center items-center p-4">
+                        <div className="w-full bg-[#1a1a1a] border-4 border-white p-6 pixel-corners text-center shadow-2xl relative">
+                            <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-black px-4 border-2 border-white pixel-corners">
+                                <h2 className="pixel-font text-3xl text-green-400">SUCCESS</h2>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3 mt-4 mb-6">
+                                {Object.entries(inventory).map(([key, val]) => (
+                                    val > 0 && <div key={key} className="flex justify-between items-center bg-slate-800 p-3 pixel-corners border border-slate-600">
+                                        <div className="flex items-center gap-2">
+                                            <span className="pixel-font text-xl uppercase text-slate-300">{key}</span>
+                                        </div>
+                                        <span className="pixel-font text-2xl text-yellow-400">+{val}</span>
+                                    </div>
+                                ))}
+                            </div>
+                            <button onClick={() => setPhase('LOBBY')} className="w-full py-3 bg-slate-600 hover:bg-slate-500 text-white pixel-font text-2xl border-b-4 border-slate-800 pixel-corners">CONTINUE</button>
+                        </div>
+                    </motion.div>
+                )}
+
+            </AnimatePresence>
+        </div>
+
+        {/* LOGS */}
+        <div className="bg-black/90 p-2 border-t-2 border-white/10 h-20 overflow-hidden pointer-events-auto text-left">
+            {logs.map((log, i) => (
+                <div key={i} className="pixel-font text-green-500/70 text-base leading-tight truncate font-thin">{log}</div>
+            ))}
+        </div>
+
       </div>
     </div>
   );
