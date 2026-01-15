@@ -231,7 +231,6 @@ export default function VarsynInterface() {
                     <SafeImage src={`/assets/bg_mission_${missionLevel}.png`} fallbackText="VILLAGE BG" alt="bg" className="bg-full" />
                     <div className="ui-layer p-4 pt-20 flex flex-col h-full">
                         
-                        {/* Top Info */}
                         <div className="bg-black/80 p-4 rounded-lg border border-yellow-600/50 backdrop-blur-md shadow-lg mb-auto">
                             <h2 className="font-pixel text-2xl text-yellow-400 text-center mb-2">PROJECT: THE OUTER WALL</h2>
                             <div className="w-full bg-gray-700 h-6 rounded-full overflow-hidden border-2 border-gray-500 relative">
@@ -240,35 +239,37 @@ export default function VarsynInterface() {
                             </div>
                         </div>
 
-                        {/* BOTTOM GROUP */}
                         <div className="mt-auto space-y-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 rounded-xl pt-10">
                             
-                            {/* Donation Panel (GRID FIX) */}
                             <div className="bg-[#1e293b]/95 p-4 rounded-xl border-2 border-slate-600 shadow-xl">
                                 <p className="font-pixel text-xl text-center mb-4 text-white">Select Material:</p>
                                 
-                                <div className="grid grid-cols-2 gap-4 mb-6"> {/* Gap lebih lega */}
+                                <div className="grid grid-cols-2 gap-4 mb-6">
                                     {['meat', 'bone', 'hide', 'cVar'].map((item) => (
                                         <button 
                                             key={item}
                                             onClick={() => handleSelectMaterial(item)}
+                                            /* KELAS CSS INI YANG BIKIN RAPI:
+                                               - h-[100px]: Paksa tinggi tombol sama semua
+                                               - w-full: Menuhin grid
+                                               - flex-col justify-center: Konten di tengah
+                                            */
                                             className={`
-                                                relative p-4 rounded-xl border-2 transition-all active:scale-95 flex flex-col items-center justify-center gap-2
+                                                relative h-[100px] w-full p-2 rounded-xl border-2 transition-all active:scale-95 flex flex-col items-center justify-center gap-1
                                                 ${selectedMaterial === item 
                                                     ? 'bg-yellow-900/40 border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.3)]' 
                                                     : 'bg-black/60 border-slate-700 hover:border-slate-500 hover:bg-black/80'}
                                             `}
                                         >
-                                            {/* Container Ikon Tetap */}
-                                            <div className="w-12 h-12 flex items-center justify-center">
+                                            <div className="w-10 h-10 flex items-center justify-center">
                                                 <SafeImage 
                                                     src={`/assets/icon_${item.toLowerCase()}.png`} 
-                                                    className="w-full h-full object-contain drop-shadow-md" 
+                                                    className="max-w-full max-h-full object-contain drop-shadow-md" 
                                                     alt={item} 
                                                     fallbackText={item[0].toUpperCase()} 
                                                 />
                                             </div>
-                                            <span className={`font-pixel text-xl uppercase tracking-wide ${selectedMaterial === item ? 'text-yellow-400' : 'text-slate-400'}`}>
+                                            <span className={`font-pixel text-lg uppercase tracking-wide ${selectedMaterial === item ? 'text-yellow-400' : 'text-slate-400'}`}>
                                                 {item}
                                             </span>
                                             {selectedMaterial === item && <div className="absolute top-2 right-2 w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />}
