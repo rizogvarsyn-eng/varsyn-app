@@ -2,11 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 1. IMPORT FONT PIXEL (VT323) BIAR GLOBAL */
+/* 1. IMPORT FONT PIXEL (VT323) */
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
 :root {
-  /* Warna Background Dark Grey (#0f1115) */
+  /* Warna Background Gelap (Biar nyatu sama wrapper desktop) */
   --background-rgb: 15, 17, 21; 
   --foreground-rgb: 255, 255, 255;
 }
@@ -14,41 +14,36 @@
 body {
   color: rgb(var(--foreground-rgb));
   background-color: rgb(var(--background-rgb));
-  /* Set font default jadi Pixel, biar konsisten */
+  /* Set font default jadi Pixel */
   font-family: 'VT323', monospace; 
-  /* Biar gak ada margin aneh di HP */
+  /* Reset margin biar full screen di mobile */
   margin: 0;
   padding: 0;
+  overflow: hidden; /* Mencegah scroll bar ganda di desktop */
 }
 
-/* UTILITY: Sudut Pixel (Tetap dipake buat jaga-jaga) */
-.pixel-corners {
-  clip-path: polygon(
-    0px 4px,
-    4px 4px,
-    4px 0px,
-    calc(100% - 4px) 0px,
-    calc(100% - 4px) 4px,
-    100% 4px,
-    100% calc(100% - 4px),
-    calc(100% - 4px) calc(100% - 4px),
-    calc(100% - 4px) 100%,
-    4px 100%,
-    4px calc(100% - 4px),
-    0px calc(100% - 4px)
-  );
-}
-
-.pixel-shadow {
-  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 0.4);
-}
-
-/* ANIMASI TAMBAHAN */
+/* UTILITY: Animasi Melayang (Buat Creator / Hantu) */
 @keyframes float {
   0% { transform: translateY(0px); }
   50% { transform: translateY(-10px); }
   100% { transform: translateY(0px); }
 }
+
 .animate-float {
   animation: float 3s ease-in-out infinite;
+}
+
+/* UTILITY: Scrollbar Keren (Optional, buat log) */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #1a1a1a; 
+}
+::-webkit-scrollbar-thumb {
+  background: #4ade80; /* Warna Hijau Terminal */
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #22c55e; 
 }
