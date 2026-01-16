@@ -17,11 +17,11 @@ const contract = getContract({ client, chain: baseSepolia, address: process.env.
 
 type ViewState = 'LOGIN' | 'MINTING' | 'LOBBY' | 'HUNTING' | 'MISSION';
 
-// Safe Image Component
+// Safe Image Component (Updated for strict layout)
 const SafeImage = ({ src, alt, className, fallbackText }: { src: string, alt: string, className?: string, fallbackText?: string }) => {
     const [error, setError] = useState(false);
-    const fallbackSrc = `https://placehold.co/400x600/1a1a1a/4ade80/png?text=${fallbackText || 'ASSET'}&font=roboto`;
-    return <img src={error ? fallbackSrc : src} alt={alt} className={className} onError={() => setError(true)} />;
+    const fallbackSrc = `https://placehold.co/400x600/1a1a1a/4ade80/png?text=${fallbackText || 'IMG'}&font=roboto`;
+    return <img src={error ? fallbackSrc : src} alt={alt} className={`${className} object-contain`} onError={() => setError(true)} />;
 };
 
 export default function VarsynInterface() {
@@ -35,13 +35,9 @@ export default function VarsynInterface() {
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
   const [donateQty, setDonateQty] = useState(10);
 
-  // --- LOGIC: SYSTEM CHECK ---
+  // --- LOGIC ---
   useEffect(() => {
-    if (account?.address) {
-        checkAccess(account.address);
-    } else {
-        setCurrentView('LOGIN');
-    }
+    if (account?.address) { checkAccess(account.address); } else { setCurrentView('LOGIN'); }
   }, [account?.address]);
 
   const checkAccess = async (wallet: string) => {
@@ -89,7 +85,6 @@ export default function VarsynInterface() {
       }
   };
 
-  // --- LOGIC: HUNTING ---
   const startHunt = () => { setCurrentView('HUNTING'); setHuntTimer(5); setHuntLog([]); };
   useEffect(() => {
       if (currentView === 'HUNTING' && huntTimer > 0) {
@@ -109,10 +104,9 @@ export default function VarsynInterface() {
       else { loot = { name: "Meat", type: "meat", qty: 3 }; beast = "Wild Boar"; }
 
       if (loot.type) setInventory(prev => ({ ...prev, [loot.type]: prev[loot.type as keyof typeof inventory] + loot.qty }));
-      setHuntLog([`> Target: ${beast} eliminated.`, `> Loot: ${loot.qty}x ${loot.name}`, `> Status: Return to base.`]);
+      setHuntLog([`> Target: ${beast} eliminated.`, `> Loot: ${loot.qty}x ${loot.name}`, `> Status: Return.`]);
   };
 
-  // --- LOGIC: MISSION ---
   const handleSelectMaterial = (type: string) => { setSelectedMaterial(type); setDonateQty(10); };
   const handleDonateConfirm = async () => {
       if (!selectedMaterial) return;
@@ -188,17 +182,23 @@ export default function VarsynInterface() {
                 <motion.div key="lobby" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="w-full h-full relative">
                     <SafeImage src="/assets/bg_lobby.png" fallbackText="CAVE BG" alt="bg" className="bg-full" />
                     <div className="ui-layer p-4 pt-20 justify-between">
+                        
+                        {/* --- LOBBY TOP BAR: GRID FIXED 4 COLUMN --- */}
                         <div className="flex flex-col gap-2">
                             <div className="bg-black/70 px-2 py-1 rounded border border-slate-700 self-start font-pixel text-slate-400 text-xs">ID: {account?.address?.slice(0,6)}...</div>
-                            <div className="bg-black/70 border border-slate-600 rounded-lg p-2 flex justify-between backdrop-blur-md">
+                            {/* Grid cols-4 memaksa setiap item lebarnya sama persis */}
+                            <div className="bg-black/70 border border-slate-600 rounded-lg p-2 grid grid-cols-4 gap-2 backdrop-blur-md">
                                 {['cVar', 'meat', 'bone', 'hide'].map((item) => (
-                                    <div key={item} className="flex flex-col items-center min-w-[40px]">
-                                        <SafeImage src={`/assets/icon_${item.toLowerCase()}.png`} fallbackText={item[0].toUpperCase()} alt={item} className="w-6 h-6 mb-1" />
-                                        <span className={`font-pixel text-lg ${item === 'cVar' ? 'text-yellow-400' : 'text-white'}`}>{inventory[item as keyof typeof inventory]}</span>
+                                    <div key={item} className="flex flex-col items-center justify-center">
+                                        <div className="w-6 h-6 mb-1 flex items-center justify-center">
+                                            <SafeImage src={`/assets/icon_${item.toLowerCase()}.png`} fallbackText={item[0].toUpperCase()} alt={item} className="max-w-full max-h-full" />
+                                        </div>
+                                        <span className={`font-pixel text-lg leading-none ${item === 'cVar' ? 'text-yellow-400' : 'text-white'}`}>{inventory[item as keyof typeof inventory]}</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
+
                         <div className="flex-1 flex items-center justify-center">
                             <SafeImage src="/assets/char_clonevar.png" fallbackText="CLONEVAR" alt="char" className="w-48 drop-shadow-2xl filter brightness-110" />
                         </div>
@@ -244,25 +244,26 @@ export default function VarsynInterface() {
                             <div className="bg-[#1e293b]/95 p-4 rounded-xl border-2 border-slate-600 shadow-xl">
                                 <p className="font-pixel text-xl text-center mb-4 text-white">Select Material:</p>
                                 
-                                {/* PERBAIKAN GRID V14.3:
-                                    - gap-3: Biar gak terlalu dempet.
-                                    - h-24 (96px): Tinggi Fix.
-                                    - w-10 h-10 container: Ukuran gambar dikunci.
+                                {/* --- MISSION GRID FIXED (V14.4 FIX) --- 
+                                    - grid-cols-2 gap-4: Jarak lega
+                                    - h-24: Tinggi Tombol Fix (96px)
+                                    - justify-center: Konten tengah vertical
+                                    - items-center: Konten tengah horizontal
                                 */}
-                                <div className="grid grid-cols-2 gap-3 mb-6">
+                                <div className="grid grid-cols-2 gap-4 mb-6">
                                     {['meat', 'bone', 'hide', 'cVar'].map((item) => (
                                         <button 
                                             key={item}
                                             onClick={() => handleSelectMaterial(item)}
                                             className={`
-                                                relative h-24 w-full p-2 rounded-xl border-2 transition-all active:scale-95 flex flex-col items-center justify-center gap-1
+                                                relative h-24 w-full rounded-xl border-2 transition-all active:scale-95 flex flex-col items-center justify-center gap-1
                                                 ${selectedMaterial === item 
                                                     ? 'bg-yellow-900/40 border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.3)]' 
                                                     : 'bg-black/60 border-slate-700 hover:border-slate-500 hover:bg-black/80'}
                                             `}
                                         >
-                                            {/* Container Ikon: Dikunci biar gak lari */}
-                                            <div className="w-10 h-10 flex items-center justify-center overflow-hidden">
+                                            {/* Container Ikon Fix 10x10 (40px) */}
+                                            <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
                                                 <SafeImage 
                                                     src={`/assets/icon_${item.toLowerCase()}.png`} 
                                                     className="w-full h-full object-contain drop-shadow-md" 
