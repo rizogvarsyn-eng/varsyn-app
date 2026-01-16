@@ -2,12 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* --- IMPORT FONT PIXEL (VT323) --- */
+/* --- 1. IMPORT FONT PIXEL (VT323) --- */
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
 :root {
-  /* Warna Background Desktop (Dark Grey) */
-  --background-rgb: 15, 17, 21; /* #0f1115 */
+  /* Warna Background Desktop (Dark Grey #0f1115) */
+  --background-rgb: 15, 17, 21; 
   --foreground-rgb: 255, 255, 255;
 }
 
@@ -19,18 +19,21 @@ html, body {
 body {
   color: rgb(var(--foreground-rgb));
   background-color: rgb(var(--background-rgb));
-  /* Kunci Font Utama jadi Pixel */
+  
+  /* Kunci Font Utama jadi Pixel (VT323) */
   font-family: 'VT323', monospace;
-  /* Reset Margin biar Fullscreen aman */
+  
+  /* Reset Margin & Padding */
   margin: 0;
   padding: 0;
+  
   /* Mencegah scrollbar ganda di desktop */
-  overflow: hidden; 
+  overflow-x: hidden; 
 }
 
-/* --- ANIMASI & UTILITY --- */
+/* --- 2. UTILITY KHUSUS --- */
 
-/* Animasi Melayang (Buat Logo/Karakter) */
+/* Animasi Melayang (Buat Creator/Logo) */
 @keyframes float {
   0% { transform: translateY(0px); }
   50% { transform: translateY(-10px); }
@@ -41,18 +44,21 @@ body {
   animation: float 3s ease-in-out infinite;
 }
 
-/* Custom Scrollbar (Tipis & Gelap) */
+/* --- 3. SCROLLBAR KEREN (Biar gak ngerusak pemandangan) --- */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: #1a1a1a; 
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #4a5568; 
+  background: #4a5568; /* Abu-abu Slate */
   border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #4ade80; 
+  background: #4ade80; /* Hijau saat di-hover */
 }

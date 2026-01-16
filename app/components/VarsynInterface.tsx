@@ -11,52 +11,70 @@ import { ConnectButton, useActiveAccount, TransactionButton } from "thirdweb/rea
 import { baseSepolia } from "thirdweb/chains";
 import { claimTo, balanceOf } from "thirdweb/extensions/erc721";
 
-// Setup
+// Setup Client & Contract
 const client = createThirdwebClient({ clientId: process.env.NEXT_PUBLIC_THIRDWEB_CLIENT_ID || "" });
 const contract = getContract({ client, chain: baseSepolia, address: process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "" });
 
+// Tipe View
 type ViewState = 'LOGIN' | 'MINTING' | 'LOBBY' | 'HUNTING' | 'MISSION';
 
-// Safe Image Component (Updated for strict layout)
+// Komponen Gambar Aman (Fallback Otomatis)
 const SafeImage = ({ src, alt, className, fallbackText }: { src: string, alt: string, className?: string, fallbackText?: string }) => {
     const [error, setError] = useState(false);
-    const fallbackSrc = `https://placehold.co/400x600/1a1a1a/4ade80/png?text=${fallbackText || 'IMG'}&font=roboto`;
-    return <img src={error ? fallbackSrc : src} alt={alt} className={`${className} object-contain`} onError={() => setError(true)} />;
+    // Placeholder otomatis kalau gambar belum ada di folder
+    const fallbackSrc = `https://placehold.co/400x600/1a1a1a/4ade80/png?text=${fallbackText || 'ASSET'}&font=roboto`;
+    return <img src={error ? fallbackSrc : src} alt={alt} className={className} onError={() => setError(true)} />;
 };
 
 export default function VarsynInterface() {
   const account = useActiveAccount();
+  
+  // State Navigasi & Loading
   const [currentView, setCurrentView] = useState<ViewState>('LOGIN');
   const [loading, setLoading] = useState(false);
+  
+  // Data Player
   const [inventory, setInventory] = useState({ meat: 0, bone: 0, hide: 0, cVar: 0 });
   const [missionLevel, setMissionLevel] = useState(1);
+  
+  // State Hunting
   const [huntTimer, setHuntTimer] = useState(0);
   const [huntLog, setHuntLog] = useState<string[]>([]);
+
+  // State Mission (Logika Donasi Baru)
   const [selectedMaterial, setSelectedMaterial] = useState<string | null>(null);
   const [donateQty, setDonateQty] = useState(10);
 
-  // --- LOGIC ---
+  // --- LOGIC: SYSTEM CHECK ---
   useEffect(() => {
-    if (account?.address) { checkAccess(account.address); } else { setCurrentView('LOGIN'); }
+    if (account?.address) {
+        checkAccess(account.address);
+    } else {
+        setCurrentView('LOGIN');
+    }
   }, [account?.address]);
 
   const checkAccess = async (wallet: string) => {
     setLoading(true);
     try {
+        // 1. Cek Blockchain (Intel)
         let hasNft = false;
         try {
             const balance = await balanceOf({ contract, owner: wallet });
             hasNft = balance > BigInt(0);
         } catch (e) { console.warn("Chain check skip", e); }
 
+        // 2. Cek Database
         const { data: users } = await supabase.from('users').select('*').eq('wallet_address', wallet);
         const user = users?.[0];
 
         if (user) {
+            // Self-Healing: Update DB jika chain punya tapi DB false
             if (hasNft && !user.has_sigil) {
                 await supabase.from('users').update({ has_sigil: true }).eq('wallet_address', wallet);
                 user.has_sigil = true;
             }
+            // Arahkan View
             if (user.has_sigil) {
                 loadData(user.id);
                 setCurrentView('LOBBY');
@@ -64,6 +82,7 @@ export default function VarsynInterface() {
                 setCurrentView('MINTING');
             }
         } else {
+            // User Baru
             const { data: newUsers } = await supabase.from('users').insert([{ wallet_address: wallet, has_sigil: hasNft }]).select();
             if (newUsers?.[0]) {
                 await supabase.from('inventory').insert([{ user_id: newUsers[0].id }]);
@@ -85,7 +104,9 @@ export default function VarsynInterface() {
       }
   };
 
+  // --- LOGIC: HUNTING ---
   const startHunt = () => { setCurrentView('HUNTING'); setHuntTimer(5); setHuntLog([]); };
+  
   useEffect(() => {
       if (currentView === 'HUNTING' && huntTimer > 0) {
           const tick = setInterval(() => setHuntTimer(t => t - 1), 1000);
@@ -99,18 +120,30 @@ export default function VarsynInterface() {
       const r = Math.random();
       let loot = { name: "Nothing", type: "", qty: 0 };
       let beast = "Wild Boar";
+
       if (r < 0.1) { loot = { name: "Hide", type: "hide", qty: 1 }; beast = "Shadow Wolf"; }
       else if (r < 0.4) { loot = { name: "Bone", type: "bone", qty: 2 }; beast = "Skeleton"; }
       else { loot = { name: "Meat", type: "meat", qty: 3 }; beast = "Wild Boar"; }
 
-      if (loot.type) setInventory(prev => ({ ...prev, [loot.type]: prev[loot.type as keyof typeof inventory] + loot.qty }));
-      setHuntLog([`> Target: ${beast} eliminated.`, `> Loot: ${loot.qty}x ${loot.name}`, `> Status: Return.`]);
+      if (loot.type) {
+          setInventory(prev => ({ ...prev, [loot.type]: prev[loot.type as keyof typeof inventory] + loot.qty }));
+      }
+      
+      setHuntLog([
+          `> Target: ${beast} eliminated.`,
+          `> Loot: ${loot.qty}x ${loot.name}`,
+          `> Status: Return to base.`
+      ]);
   };
 
+  // --- LOGIC: MISSION DONATION ---
   const handleSelectMaterial = (type: string) => { setSelectedMaterial(type); setDonateQty(10); };
   const handleDonateConfirm = async () => {
       if (!selectedMaterial) return;
-      setInventory(prev => ({ ...prev, [selectedMaterial]: Math.max(0, prev[selectedMaterial as keyof typeof inventory] - donateQty) }));
+      setInventory(prev => ({
+          ...prev,
+          [selectedMaterial]: Math.max(0, prev[selectedMaterial as keyof typeof inventory] - donateQty)
+      }));
       alert(`Donated ${donateQty} ${selectedMaterial} to Project!`);
       setSelectedMaterial(null);
   };
@@ -118,7 +151,9 @@ export default function VarsynInterface() {
   // --- RENDER UI ---
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#0f1115] p-4 font-mono">
-      <div className="w-full max-w-[400px] aspect-[9/16] bg-black relative overflow-hidden shadow-2xl border-2 border-[#2d3748] rounded-[24px] text-white flex flex-col">
+      
+      {/* FRAME HP: Border 2px (Tipis) sesuai request */}
+      <div className="w-full max-w-[400px] aspect-[9/16] bg-black relative overflow-hidden shadow-2xl border-2 border-slate-800 rounded-[24px] text-white flex flex-col">
         
         <style jsx global>{`
           @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
@@ -127,50 +162,96 @@ export default function VarsynInterface() {
           .ui-layer { position: relative; z-index: 10; height: 100%; display: flex; flex-direction: column; }
         `}</style>
 
+        {/* TOP BAR (Hidden on Login) */}
         {currentView !== 'LOGIN' && (
             <div className="absolute top-0 w-full z-20 bg-black/50 p-2 border-b border-white/10 flex justify-between items-center backdrop-blur-sm pt-4 px-4">
                 <span className="font-pixel text-xl text-green-400 tracking-widest drop-shadow-md">VARSYN</span>
-                <div className="scale-75 origin-right"><ConnectButton client={client} chain={baseSepolia} theme="dark" connectModal={{ size: "compact" }} /></div>
+                <div className="scale-75 origin-right">
+                    <ConnectButton client={client} chain={baseSepolia} theme="dark" connectModal={{ size: "compact" }} />
+                </div>
             </div>
         )}
 
         <AnimatePresence mode='wait'>
 
+            {/* --- VIEW 1: LOGIN (WIRE FRAME ACC) --- */}
             {currentView === 'LOGIN' && (
                 <motion.div key="login" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="w-full h-full relative">
                     <SafeImage src="/assets/bg_common.png" fallbackText="BG LOGIN" alt="bg" className="bg-full opacity-60" />
-                    <div className="ui-layer items-center justify-center p-6 flex-col gap-8">
-                        <div className="flex-1 flex items-center justify-center w-full">
-                            <SafeImage src="/assets/logo_main.png" fallbackText="VARSYN LOGO" alt="logo" className="w-64 max-w-full h-auto object-contain animate-pulse drop-shadow-2xl" />
+                    
+                    {/* UI LAYER: Flex Column Center */}
+                    <div className="ui-layer items-center w-full h-full">
+                        
+                        {/* 1. LOGO: Posisi Atas (Margin Top 16 = 64px) */}
+                        <div className="mt-16 mb-auto w-full flex justify-center">
+                            <SafeImage 
+                                src="/assets/logo_main.png" 
+                                fallbackText="VARSYN LOGO" 
+                                alt="logo" 
+                                className="w-[240px] h-auto object-contain animate-pulse drop-shadow-2xl" 
+                            />
                         </div>
-                        <div className="flex-1 flex flex-col justify-center items-center gap-4 w-full">
-                            <div className="transform scale-110"><ConnectButton client={client} chain={baseSepolia} theme="dark" connectModal={{ size: "compact" }} /></div>
+
+                        {/* 2. ACTION AREA: Posisi Bawah (Margin Bottom 20 = 80px) */}
+                        <div className="mb-20 flex flex-col justify-center items-center gap-4 w-full">
+                            
+                            {/* Tombol Connect (Scale up dikit biar gagah) */}
+                            <div className="transform scale-110">
+                                <ConnectButton 
+                                    client={client} 
+                                    chain={baseSepolia} 
+                                    theme="dark" 
+                                    connectModal={{ size: "compact" }} 
+                                />
+                            </div>
+
+                            {/* Teks Status */}
                             <div className="text-center mt-2">
-                                <h2 className="font-pixel text-xl text-green-400 tracking-widest mb-1">SYSTEM ONLINE</h2>
-                                <p className="font-pixel text-slate-400 text-sm">Identify Yourself, Manager.</p>
+                                <h2 className="font-pixel text-2xl text-green-400 tracking-widest mb-1 drop-shadow-md">SYSTEM ONLINE</h2>
+                                <p className="font-pixel text-slate-400 text-sm">Identify Yourself</p>
                             </div>
                         </div>
+
                     </div>
                 </motion.div>
             )}
 
+            {/* VIEW 1.5: MINTING (Creator & Dialog Bawah) */}
             {currentView === 'MINTING' && (
                 <motion.div key="minting" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="w-full h-full relative">
                     <SafeImage src="/assets/bg_common.png" fallbackText="BG MINT" alt="bg" className="bg-full opacity-40" />
+                    
                     <div className="ui-layer p-4 pt-20 flex-col">
+                        {/* ATAS: SIGIL */}
                         <div className="flex-1 flex items-center justify-center">
                             <div className="relative">
                                 <SafeImage src="/assets/img_sigil.png" fallbackText="SIGIL CARD" alt="sigil" className="w-32 hover:scale-105 transition drop-shadow-[0_0_15px_rgba(74,222,128,0.5)]" />
                             </div>
                         </div>
+
+                        {/* TENGAH: TOMBOL MINT */}
                         <div className="w-full mb-8">
-                            <TransactionButton transaction={() => { if(!account?.address) throw new Error("No wallet"); return claimTo({ contract, to: account.address, quantity: BigInt(1) }); }} onTransactionConfirmed={handleMintSuccess} unstyled className="w-full bg-blue-600 hover:bg-blue-500 text-white font-pixel text-3xl py-4 border-b-4 border-blue-800 rounded-xl active:translate-y-1 active:border-b-0 shadow-lg">MINT ACCESS</TransactionButton>
+                            <TransactionButton
+                                transaction={() => {
+                                    if(!account?.address) throw new Error("No wallet");
+                                    return claimTo({ contract, to: account.address, quantity: BigInt(1) });
+                                }}
+                                onTransactionConfirmed={handleMintSuccess}
+                                unstyled
+                                className="w-full bg-blue-600 hover:bg-blue-500 text-white font-pixel text-3xl py-4 border-b-4 border-blue-800 rounded-xl active:translate-y-1 active:border-b-0 shadow-lg"
+                            >
+                                MINT ACCESS
+                            </TransactionButton>
                             <p className="text-center font-pixel text-slate-400 mt-2">Price: 0.5 USDC</p>
                         </div>
+
+                        {/* BAWAH: CREATOR & DIALOG */}
                         <div className="flex items-end gap-2 pb-4">
                             <SafeImage src="/assets/char_creator.png" fallbackText="CREATOR" alt="creator" className="w-24 drop-shadow-lg" />
                             <div className="bg-white border-2 border-black p-3 rounded-tr-xl rounded-tl-xl rounded-br-xl relative flex-1 mb-4 shadow-lg">
-                                <p className="font-pixel text-xl text-black leading-tight">"Listen up, Manager. The system's crashing. We need that <span className="font-bold text-blue-700">SigilVar</span>. Get yours, ASAP."</p>
+                                <p className="font-pixel text-xl text-black leading-tight">
+                                    "Listen up, Manager. The system's crashing. We need that <span className="font-bold text-blue-700">SigilVar</span> to patch the core. Get yours, ASAP."
+                                </p>
                                 <div className="absolute bottom-[-8px] left-0 w-0 h-0 border-l-[10px] border-l-white border-b-[10px] border-b-transparent"></div>
                             </div>
                         </div>
@@ -178,30 +259,33 @@ export default function VarsynInterface() {
                 </motion.div>
             )}
 
+            {/* VIEW 2: LOBBY (Resource Horizontal & Char Center) */}
             {currentView === 'LOBBY' && (
                 <motion.div key="lobby" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="w-full h-full relative">
                     <SafeImage src="/assets/bg_lobby.png" fallbackText="CAVE BG" alt="bg" className="bg-full" />
                     <div className="ui-layer p-4 pt-20 justify-between">
                         
-                        {/* --- LOBBY TOP BAR: GRID FIXED 4 COLUMN --- */}
+                        {/* TOP: RESOURCES (HORIZONTAL) */}
                         <div className="flex flex-col gap-2">
-                            <div className="bg-black/70 px-2 py-1 rounded border border-slate-700 self-start font-pixel text-slate-400 text-xs">ID: {account?.address?.slice(0,6)}...</div>
-                            {/* Grid cols-4 memaksa setiap item lebarnya sama persis */}
-                            <div className="bg-black/70 border border-slate-600 rounded-lg p-2 grid grid-cols-4 gap-2 backdrop-blur-md">
+                            <div className="bg-black/70 px-2 py-1 rounded border border-slate-700 self-start font-pixel text-slate-400 text-xs">
+                                ID: {account?.address?.slice(0,6)}...
+                            </div>
+                            <div className="bg-black/70 border border-slate-600 rounded-lg p-2 flex justify-between backdrop-blur-md">
                                 {['cVar', 'meat', 'bone', 'hide'].map((item) => (
-                                    <div key={item} className="flex flex-col items-center justify-center">
-                                        <div className="w-6 h-6 mb-1 flex items-center justify-center">
-                                            <SafeImage src={`/assets/icon_${item.toLowerCase()}.png`} fallbackText={item[0].toUpperCase()} alt={item} className="max-w-full max-h-full" />
-                                        </div>
-                                        <span className={`font-pixel text-lg leading-none ${item === 'cVar' ? 'text-yellow-400' : 'text-white'}`}>{inventory[item as keyof typeof inventory]}</span>
+                                    <div key={item} className="flex flex-col items-center min-w-[40px]">
+                                        <SafeImage src={`/assets/icon_${item.toLowerCase()}.png`} fallbackText={item[0].toUpperCase()} alt={item} className="w-6 h-6 mb-1" />
+                                        <span className={`font-pixel text-lg ${item === 'cVar' ? 'text-yellow-400' : 'text-white'}`}>{inventory[item as keyof typeof inventory]}</span>
                                     </div>
                                 ))}
                             </div>
                         </div>
 
+                        {/* CENTER: CHAR */}
                         <div className="flex-1 flex items-center justify-center">
                             <SafeImage src="/assets/char_clonevar.png" fallbackText="CLONEVAR" alt="char" className="w-48 drop-shadow-2xl filter brightness-110" />
                         </div>
+
+                        {/* BOTTOM: BUTTONS */}
                         <div className="flex gap-3">
                             <button onClick={() => setCurrentView('MISSION')} className="flex-1 bg-blue-700 border-b-4 border-blue-900 p-3 rounded-lg active:translate-y-1 active:border-b-0 hover:bg-blue-600 transition"><Map className="mx-auto mb-1 w-6" /><span className="font-pixel text-2xl block">MISSION</span><span className="font-pixel text-xs text-blue-200 block">GLOBAL</span></button>
                             <button onClick={startHunt} className="flex-1 bg-red-700 border-b-4 border-red-900 p-3 rounded-lg active:translate-y-1 active:border-b-0 hover:bg-red-600 transition"><Swords className="mx-auto mb-1 w-6" /><span className="font-pixel text-2xl block">HUNT</span><span className="font-pixel text-xs text-red-200 block">RAID</span></button>
@@ -210,6 +294,7 @@ export default function VarsynInterface() {
                 </motion.div>
             )}
 
+            {/* VIEW 3: HUNTING (Timer & Log) */}
             {currentView === 'HUNTING' && (
                 <motion.div key="hunting" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="w-full h-full relative">
                     <SafeImage src="/assets/bg_hunt.png" fallbackText="FOREST BG" alt="bg" className="bg-full brightness-50" />
@@ -226,6 +311,7 @@ export default function VarsynInterface() {
                 </motion.div>
             )}
 
+            {/* VIEW 4: MISSION (Mission UI Bottom) */}
             {currentView === 'MISSION' && (
                 <motion.div key="mission" initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="w-full h-full relative">
                     <SafeImage src={`/assets/bg_mission_${missionLevel}.png`} fallbackText="VILLAGE BG" alt="bg" className="bg-full" />
@@ -244,37 +330,15 @@ export default function VarsynInterface() {
                             <div className="bg-[#1e293b]/95 p-4 rounded-xl border-2 border-slate-600 shadow-xl">
                                 <p className="font-pixel text-xl text-center mb-4 text-white">Select Material:</p>
                                 
-                                {/* --- MISSION GRID FIXED (V14.4 FIX) --- 
-                                    - grid-cols-2 gap-4: Jarak lega
-                                    - h-24: Tinggi Tombol Fix (96px)
-                                    - justify-center: Konten tengah vertical
-                                    - items-center: Konten tengah horizontal
-                                */}
-                                <div className="grid grid-cols-2 gap-4 mb-6">
+                                <div className="grid grid-cols-2 gap-3 mb-4">
                                     {['meat', 'bone', 'hide', 'cVar'].map((item) => (
                                         <button 
                                             key={item}
                                             onClick={() => handleSelectMaterial(item)}
-                                            className={`
-                                                relative h-24 w-full rounded-xl border-2 transition-all active:scale-95 flex flex-col items-center justify-center gap-1
-                                                ${selectedMaterial === item 
-                                                    ? 'bg-yellow-900/40 border-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.3)]' 
-                                                    : 'bg-black/60 border-slate-700 hover:border-slate-500 hover:bg-black/80'}
-                                            `}
+                                            className={`p-3 rounded-lg border-2 flex flex-col items-center transition active:scale-95 ${selectedMaterial === item ? 'bg-yellow-900/50 border-yellow-400' : 'bg-black/50 border-slate-600 hover:border-slate-400'}`}
                                         >
-                                            {/* Container Ikon Fix 10x10 (40px) */}
-                                            <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
-                                                <SafeImage 
-                                                    src={`/assets/icon_${item.toLowerCase()}.png`} 
-                                                    className="w-full h-full object-contain drop-shadow-md" 
-                                                    alt={item} 
-                                                    fallbackText={item[0].toUpperCase()} 
-                                                />
-                                            </div>
-                                            <span className={`font-pixel text-lg uppercase tracking-wide leading-none ${selectedMaterial === item ? 'text-yellow-400' : 'text-slate-400'}`}>
-                                                {item}
-                                            </span>
-                                            {selectedMaterial === item && <div className="absolute top-2 right-2 w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />}
+                                            <SafeImage src={`/assets/icon_${item.toLowerCase()}.png`} className="w-8 h-8 mb-1" alt={item} fallbackText={item[0].toUpperCase()} />
+                                            <span className={`font-pixel text-lg uppercase ${selectedMaterial === item ? 'text-yellow-400' : 'text-slate-400'}`}>{item}</span>
                                         </button>
                                     ))}
                                 </div>
@@ -286,7 +350,7 @@ export default function VarsynInterface() {
                                             <span className="font-pixel text-3xl text-white w-16 text-center">{donateQty}</span>
                                             <button onClick={() => setDonateQty(donateQty + 1)} className="p-2 bg-slate-700 rounded hover:bg-slate-600"><Plus size={16} /></button>
                                         </div>
-                                        <button onClick={handleDonateConfirm} className="w-full bg-green-600 hover:bg-green-500 py-3 rounded-lg font-pixel text-2xl border-b-4 border-green-800 active:border-b-0 active:translate-y-1 text-white">CONFIRM</button>
+                                        <button onClick={handleDonateConfirm} className="w-full bg-green-600 hover:bg-green-500 py-3 rounded-lg font-pixel text-2xl border-b-4 border-green-800 active:border-b-0 active:translate-y-1 text-white">CONFIRM DONATION</button>
                                     </div>
                                 ) : (
                                     <p className="text-center font-pixel text-slate-500 text-sm h-[88px] flex items-center justify-center">Select item above to contribute...</p>
